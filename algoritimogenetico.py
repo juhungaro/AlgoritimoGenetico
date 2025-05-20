@@ -11,7 +11,7 @@ Original file is located at
 import streamlit as st
 import random
 import numpy as np
-import matplotlib.pyplot as plt
+
 
 # ---------------------------
 # Funções do Algoritmo Genético
