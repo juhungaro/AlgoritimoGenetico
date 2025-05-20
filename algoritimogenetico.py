@@ -111,29 +111,53 @@ def algoritmo_genetico(
     for geracao in range(num_geracoes):
         fitness_scores = [calcular_fitness(cromossomo, disciplinas_prioritarias)
                           for cromossomo in populacao]
-        fitness_normalizado = [f / sum(fitness_scores) for f in fitness_scores]
+
+        # Evita divisão por zero se todos os scores forem 0
+        sum_fitness = sum(fitness_scores)
+        if sum_fitness == 0:
+             fitness_normalizado = [1.0 / tamanho_populacao] * tamanho_populacao # Distribui uniformemente se todos são 0
+        else:
+            fitness_normalizado = [f / sum_fitness for f in fitness_scores]
+
         indices_selecionados = random.choices(range(tamanho_populacao), weights=fitness_normalizado, k=tamanho_populacao)
         nova_populacao = []
 
         for i in range(0, tamanho_populacao, 2):
-            pai1 = populacao[indices_selecionados[i]]
-            pai2 = populacao[indices_selecionados[i + 1]]
-            if random.random() < taxa_crossover:
-                filho1, filho2 = crossover(pai1, pai2)
+            # Garante que há pelo menos dois pais para o crossover
+            if i + 1 < tamanho_populacao:
+                pai1 = populacao[indices_selecionados[i]]
+                pai2 = populacao[indices_selecionados[i + 1]]
+                if random.random() < taxa_crossover:
+                    filho1, filho2 = crossover(pai1, pai2)
+                else:
+                    filho1, filho2 = pai1.copy(), pai2.copy()
+                if random.random() < taxa_mutacao:
+                    filho1 = mutacao(filho1, disciplinas, atividades_fisicas)
+                if random.random() < taxa_mutacao:
+                    filho2 = mutacao(filho2, disciplinas, atividades_fisicas)
+                nova_populacao.extend([filho1, filho2])
             else:
-                filho1, filho2 = pai1.copy(), pai2.copy()
-            if random.random() < taxa_mutacao:
-                filho1 = mutacao(filho1, disciplinas, atividades_fisicas)
-            if random.random() < taxa_mutacao:
-                filho2 = mutacao(filho2, disciplinas, atividades_fisicas)
-            nova_populacao.extend([filho1, filho2])
+                # Se sobrar um pai, apenas copia para a próxima geração
+                pai1 = populacao[indices_selecionados[i]]
+                if random.random() < taxa_mutacao:
+                     pai1 = mutacao(pai1, disciplinas, atividades_fisicas)
+                nova_populacao.append(pai1)
+
+
 
         populacao = nova_populacao[:tamanho_populacao]
-        melhor_fitness = max(fitness_scores)
+
+        # Calcula fitness scores para a nova população antes de encontrar o melhor fitness
+        fitness_scores_nova_populacao = [calcular_fitness(cromossomo, disciplinas_prioritarias)
+                                         for cromossomo in populacao]
+        melhor_fitness = max(fitness_scores_nova_populacao)
         fitness_history.append(melhor_fitness)
         st.write(f"Geração {geracao + 1}: Melhor fitness = {melhor_fitness:.4f}")
 
-    melhor_cromossomo = populacao[np.argmax(fitness_scores)]
+    # Calcula os fitness scores da população final para encontrar o melhor cromossomo
+    fitness_scores_final = [calcular_fitness(cromossomo, disciplinas_prioritarias)
+                            for cromossomo in populacao]
+    melhor_cromossomo = populacao[np.argmax(fitness_scores_final)]
     return melhor_cromossomo, fitness_history
 
 # ---------------------------
@@ -186,38 +210,40 @@ if st.button("Gerar Rotina"):
         else:
             st.write(f"{idx + 1}. Descanso - {bloco['duracao']} minutos")
 
-# ---------------------------
-    # Gráficos
+    # ---------------------------
+    # Gráficos - Moved into this cell
     # ---------------------------
 
     # 1. Evolução da Fitness
-st.subheader("Evolução da Fitness ao Longo das Gerações")
-fig_fitness, ax_fitness = plt.subplots()
-ax_fitness.plot(range(1, len(fitness_history) + 1), fitness_history)
-ax_fitness.set_xlabel("Geração")
-ax_fitness.set_ylabel("Melhor Fitness")
-st.pyplot(fig_fitness)
+    st.subheader("Evolução da Fitness ao Longo das Gerações")
+    fig_fitness, ax_fitness = plt.subplots()
+    ax_fitness.plot(range(1, len(fitness_history) + 1), fitness_history)
+    ax_fitness.set_xlabel("Geração")
+    ax_fitness.set_ylabel("Melhor Fitness")
+    st.pyplot(fig_fitness)
 
     # 2. Distribuição do Tempo por Atividade
-st.subheader("Distribuição do Tempo por Atividade")
-tempo_por_atividade = {
-  "Estudo": sum(bloco["duracao"] for bloco in melhor_rotina if bloco["tipo"] == "estudo"),
-  "Atividade Física": sum(bloco["duracao"] for bloco in melhor_rotina if bloco["tipo"] == "atividade_fisica"),
-  "Descanso": sum(bloco["duracao"] for bloco in melhor_rotina if bloco["tipo"] == "descanso")
-    }
-fig_atividades, ax_atividades = plt.subplots()
-ax_atividades.pie(tempo_por_atividade.values(), labels=tempo_por_atividade.keys(), autopct="%1.1f%%", startangle=90)
-st.pyplot(fig_atividades)
+    st.subheader("Distribuição do Tempo por Atividade")
+    tempo_por_atividade = {
+      "Estudo": sum(bloco["duracao"] for bloco in melhor_rotina if bloco["tipo"] == "estudo"),
+      "Atividade Física": sum(bloco["duracao"] for bloco in melhor_rotina if bloco["tipo"] == "atividade_fisica"),
+      "Descanso": sum(bloco["duracao"] for bloco in melhor_rotina if bloco["tipo"] == "descanso")
+        }
+    fig_atividades, ax_atividades = plt.subplots()
+    ax_atividades.pie(tempo_por_atividade.values(), labels=tempo_por_atividade.keys(), autopct="%1.1f%%", startangle=90)
+    # Equal aspect ratio ensures that pie is drawn as a circle.
+    ax_atividades.axis('equal')
+    st.pyplot(fig_atividades)
 
     # 3. Distribuição do Tempo por Disciplina
-st.subheader("Distribuição do Tempo por Disciplina")
-tempo_por_disciplina = {}
-for bloco in melhor_rotina:
-   if bloco["tipo"] == "estudo":
-     disciplina = bloco["disciplina"]
-     tempo_por_disciplina[disciplina] = tempo_por_disciplina.get(disciplina, 0) + bloco["duracao"]
-fig_disciplinas, ax_disciplinas = plt.subplots()
-ax_disciplinas.bar(tempo_por_disciplina.keys(), tempo_por_disciplina.values())
-ax_disciplinas.set_xlabel("Disciplina")
-ax_disciplinas.set_ylabel("Tempo (minutos)")
-st.pyplot(fig_disciplinas)
+    st.subheader("Distribuição do Tempo por Disciplina")
+    tempo_por_disciplina = {}
+    for bloco in melhor_rotina:
+       if bloco["tipo"] == "estudo":
+         disciplina = bloco["disciplina"]
+         tempo_por_disciplina[disciplina] = tempo_por_disciplina.get(disciplina, 0) + bloco["duracao"]
+    fig_disciplinas, ax_disciplinas = plt.subplots()
+    ax_disciplinas.bar(tempo_por_disciplina.keys(), tempo_por_disciplina.values())
+    ax_disciplinas.set_xlabel("Disciplina")
+    ax_disciplinas.set_ylabel("Tempo (minutos)")
+    st.pyplot(fig_disciplinas)
